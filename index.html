@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlowSentinel | Linux Network Monitor & Forensics TUI</title>
+    <meta name="description" content="FlowSentinel: High-performance, process-centric Linux network monitor. Track traffic by PID, extract TLS SNI, and record PCAPs.">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
+
+        :root {
+            --primary: #00ff9d;
+            --primary-dim: #00ff9d33;
+            --bg-dark: #0a0a0c;
+            --surface: #121216;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: #e2e8f0;
+            overflow-x: hidden;
+        }
+
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--bg-dark);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--primary);
+        }
+
+        /* Animations */
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 15px var(--primary-dim); }
+            50% { box-shadow: 0 0 25px var(--primary-dim); }
+        }
+
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+
+        .animate-float {
+            animation: float 6s ease-in-out infinite;
+        }
+
+        .glow-text {
+            text-shadow: 0 0 20px rgba(0, 255, 157, 0.5);
+        }
+
+        /* Glassmorphism */
+        .glass-panel {
+            background: rgba(18, 18, 22, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        /* Canvas Background */
+        #network-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            opacity: 0.4;
+        }
+
+        /* Reveal on Scroll */
+        .reveal {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: all 0.8s cubic-bezier(0.5, 0, 0, 1);
+        }
+        .reveal.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Code Block Styling */
+        .code-block {
+            background: #0f0f12;
+            border: 1px solid #333;
+        }
+    </style>
+</head>
+<body class="antialiased selection:bg-emerald-500 selection:text-white">
+
+    <!-- Background Canvas -->
+    <canvas id="network-canvas"></canvas>
+
+    <!-- Navigation -->
+    <nav class="fixed w-full z-50 top-0 transition-all duration-300" id="navbar">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-20">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded bg-emerald-500 flex items-center justify-center text-black font-bold text-lg">
+                        <i class="fas fa-shield-alt"></i>
+                    </div>
+                    <span class="font-bold text-xl tracking-tight text-white">Flow<span class="text-emerald-400">Sentinel</span></span>
+                </div>
+                <div class="hidden md:block">
+                    <div class="ml-10 flex items-baseline space-x-8">
+                        <a href="#features" class="hover:text-emerald-400 transition-colors px-3 py-2 rounded-md text-sm font-medium">Features</a>
+                        <a href="#forensics" class="hover:text-emerald-400 transition-colors px-3 py-2 rounded-md text-sm font-medium">Forensics</a>
+                        <a href="#installation" class="hover:text-emerald-400 transition-colors px-3 py-2 rounded-md text-sm font-medium">Install</a>
+                        <a href="https://github.com/disc0nct/FlowSentinel" target="_blank" class="bg-emerald-500/10 border border-emerald-500/50 hover:bg-emerald-500 hover:text-black transition-all px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 group">
+                            <i class="fab fa-github text-lg"></i>
+                            <span>Star on GitHub</span>
+                            <i class="fas fa-arrow-right text-xs transform group-hover:translate-x-1 transition-transform"></i>
+                        </a>
+                    </div>
+                </div>
+                <!-- Mobile menu button -->
+                <div class="md:hidden">
+                    <button id="mobile-menu-btn" class="text-gray-300 hover:text-white focus:outline-none">
+                        <i class="fas fa-bars text-2xl"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+        <!-- Mobile Menu Panel -->
+        <div class="md:hidden hidden bg-gray-900 border-b border-gray-800 absolute w-full" id="mobile-menu">
+            <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
+                <a href="#features" class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-800">Features</a>
+                <a href="#forensics" class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-800">Forensics</a>
+                <a href="#installation" class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-800">Install</a>
+                <a href="https://github.com/disc0nct/FlowSentinel" class="block px-3 py-2 text-emerald-400 font-bold">View on GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="relative pt-32 pb-20 lg:pt-48 lg:pb-32 overflow-hidden">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
+            
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold uppercase tracking-wide mb-6 reveal">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                v1.0.0 Stable Release • Rust Powered
+            </div>
+
+            <h1 class="text-5xl md:text-7xl font-extrabold text-white tracking-tight mb-6 reveal delay-100">
+                Network Forensics.<br>
+                <span class="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-500 glow-text">Process-Centric Visibility.</span>
+            </h1>
+
+            <p class="mt-4 max-w-2xl mx-auto text-xl text-gray-400 mb-10 reveal delay-200">
+                A high-performance Linux TUI for real-time traffic analysis. Identify exactly which process is talking to which server, extract TLS SNI, and capture PCAPs instantly.
+            </p>
+
+            <div class="flex flex-col sm:flex-row justify-center gap-4 reveal delay-300">
+                <a href="https://github.com/disc0nct/FlowSentinel" class="px-8 py-4 bg-emerald-500 hover:bg-emerald-400 text-black font-bold rounded-lg transition-all transform hover:-translate-y-1 hover:shadow-[0_0_20px_rgba(0,255,157,0.4)] flex items-center justify-center gap-2">
+                    <i class="fab fa-github"></i> Get Started
+                </a>
+                <a href="#features" class="px-8 py-4 glass-panel hover:bg-white/5 text-white font-semibold rounded-lg transition-all flex items-center justify-center gap-2">
+                    Features <i class="fas fa-chevron-down"></i>
+                </a>
+            </div>
+
+            <!-- TUI Screenshot Container -->
+            <div class="mt-20 mx-auto max-w-5xl reveal delay-500 animate-float">
+                <div class="glass-panel rounded-xl overflow-hidden shadow-2xl border border-gray-700 relative group">
+                    <!-- Window Controls -->
+                    <div class="bg-[#1e1e24] px-4 py-3 border-b border-gray-700 flex items-center gap-2">
+                        <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                        <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+                        <div class="w-3 h-3 rounded-full bg-green-500"></div>
+                        <div class="ml-4 text-xs text-gray-500 font-mono">root@flowsentinel:~</div>
+                    </div>
+                    <!-- Image -->
+                    <div class="relative bg-[#0f0f12]">
+                         <img src="https://github.com/user-attachments/assets/77826975-19db-4256-9dc5-9fb6cfc64b0d" alt="FlowSentinel TUI Interface" class="w-full h-auto opacity-90 hover:opacity-100 transition-opacity duration-300">
+                         <!-- Overlay Gradient to blend bottom if needed -->
+                         <div class="absolute bottom-0 left-0 w-full h-24 bg-gradient-to-t from-black/50 to-transparent pointer-events-none"></div>
+                    </div>
+                </div>
+                <div class="mt-4 text-center">
+                    <p class="text-xs text-gray-500 font-mono">Interactive TUI tracking PID, Bandwidth, and Connections</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Grid -->
+    <section id="features" class="py-24 bg-black/30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-16 reveal">
+                <h2 class="text-emerald-400 font-semibold tracking-wide uppercase text-sm">Capabilities</h2>
+                <h3 class="mt-2 text-3xl md:text-4xl font-bold text-white">Deep System Visibility</h3>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <!-- Feature 1 -->
+                <div class="glass-panel p-6 rounded-2xl hover:bg-emerald-500/5 transition-colors duration-300 reveal delay-100 group">
+                    <div class="w-12 h-12 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-400 mb-4 group-hover:scale-110 transition-transform">
+                        <i class="fas fa-microchip text-xl"></i>
+                    </div>
+                    <h4 class="text-lg font-bold text-white mb-2">Process-Centric</h4>
+                    <p class="text-sm text-gray-400 leading-relaxed">
+                        Aggregate traffic by PID, UID, and Name. See live Bytes/s and Packets/s metrics for every running application.
+                    </p>
+                </div>
+
+                <!-- Feature 2 -->
+                <div class="glass-panel p-6 rounded-2xl hover:bg-emerald-500/5 transition-colors duration-300 reveal delay-200 group">
+                    <div class="w-12 h-12 bg-blue-500/10 rounded-xl flex items-center justify-center text-blue-400 mb-4 group-hover:scale-110 transition-transform">
+                        <i class="fas fa-eye text-xl"></i>
+                    </div>
+                    <h4 class="text-lg font-bold text-white mb-2">DPI Engine</h4>
+                    <p class="text-sm text-gray-400 leading-relaxed">
+                        Extract TLS SNI to see encrypted domains. Log HTTP Hosts and track full DNS query history for every process.
+                    </p>
+                </div>
+
+                <!-- Feature 3 -->
+                <div class="glass-panel p-6 rounded-2xl hover:bg-emerald-500/5 transition-colors duration-300 reveal delay-300 group">
+                    <div class="w-12 h-12 bg-purple-500/10 rounded-xl flex items-center justify-center text-purple-400 mb-4 group-hover:scale-110 transition-transform">
+                        <i class="fas fa-file-contract text-xl"></i>
+                    </div>
+                    <h4 class="text-lg font-bold text-white mb-2">Forensics</h4>
+                    <p class="text-sm text-gray-400 leading-relaxed">
+                        Record PCAP files per process. Set bandwidth triggers to auto-record suspicious spikes. Log events to SQLite.
+                    </p>
+                </div>
+
+                <!-- Feature 4 -->
+                <div class="glass-panel p-6 rounded-2xl hover:bg-emerald-500/5 transition-colors duration-300 reveal delay-400 group">
+                    <div class="w-12 h-12 bg-orange-500/10 rounded-xl flex items-center justify-center text-orange-400 mb-4 group-hover:scale-110 transition-transform">
+                        <i class="fab fa-docker text-xl"></i>
+                    </div>
+                    <h4 class="text-lg font-bold text-white mb-2">Container Aware</h4>
+                    <p class="text-sm text-gray-400 leading-relaxed">
+                        Automatically detects Docker and Kubernetes (CRI-O) containers. Maps traffic to specific container IDs.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Detailed Forensics Section -->
+    <section id="forensics" class="py-24 relative">
+         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+                <div class="reveal">
+                    <h2 class="text-3xl font-bold text-white mb-6">Advanced Threat Detection</h2>
+                    <div class="space-y-6">
+                        <div class="flex gap-4">
+                            <div class="mt-1 flex-shrink-0 w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center text-red-400">
+                                <i class="fas fa-skull"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-white font-semibold">Threat Intelligence</h4>
+                                <p class="text-gray-400 text-sm mt-1">Integrate custom IP blacklists. Malicious connections are highlighted in <span class="text-red-400 font-bold">BOLD RED</span> instantly.</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-4">
+                            <div class="mt-1 flex-shrink-0 w-8 h-8 rounded-full bg-yellow-500/20 flex items-center justify-center text-yellow-400">
+                                <i class="fas fa-database"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-white font-semibold">SQLite Audit Logs</h4>
+                                <p class="text-gray-400 text-sm mt-1">Persistently log every DNS query and connection event for post-incident audits and timeline reconstruction.</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-4">
+                            <div class="mt-1 flex-shrink-0 w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400">
+                                <i class="fas fa-sitemap"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-white font-semibold">Process Lineage</h4>
+                                <p class="text-gray-400 text-sm mt-1">View Parent PID (PPID) and full command lines to detect suspicious spawned processes.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="glass-panel p-6 rounded-xl border border-emerald-500/20 reveal delay-200">
+                    <h3 class="text-emerald-400 font-mono text-sm mb-4 border-b border-gray-700 pb-2">FORENSICS WORKFLOW</h3>
+                    <div class="space-y-4 font-mono text-xs md:text-sm text-gray-300">
+                        <div class="flex items-start gap-3">
+                            <span class="text-gray-500">1.</span>
+                            <div>
+                                <span class="text-white">Detect Spike:</span> Process <span class="text-yellow-400">python3 (PID 1337)</span> exceeds 5MB/s.
+                            </div>
+                        </div>
+                        <div class="flex items-start gap-3">
+                            <span class="text-gray-500">2.</span>
+                            <div>
+                                <span class="text-white">Auto-Trigger:</span> FlowSentinel starts <span class="text-emerald-400">capture_python3_1337.pcap</span>.
+                            </div>
+                        </div>
+                        <div class="flex items-start gap-3">
+                            <span class="text-gray-500">3.</span>
+                            <div>
+                                <span class="text-white">Analysis:</span> DPI reveals connections to <span class="text-red-400">malicious-c2.com</span> via TLS SNI.
+                            </div>
+                        </div>
+                        <div class="flex items-start gap-3">
+                            <span class="text-gray-500">4.</span>
+                            <div>
+                                <span class="text-white">Mitigation:</span> User presses <span class="bg-gray-700 px-1 rounded text-white">x</span> to SIGTERM the process immediately.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+         </div>
+    </section>
+
+    <!-- Installation / CTA -->
+    <section id="installation" class="py-24 relative overflow-hidden bg-[#0a0a0c]">
+        <!-- Decoration -->
+        <div class="absolute top-0 left-0 w-full h-full overflow-hidden z-0 pointer-events-none">
+            <div class="absolute -top-20 -right-20 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl"></div>
+            <div class="absolute bottom-0 left-20 w-72 h-72 bg-blue-500/10 rounded-full blur-3xl"></div>
+        </div>
+
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            <div class="glass-panel rounded-3xl p-8 md:p-12 flex flex-col items-center gap-10 reveal border-emerald-500/20 text-center">
+                
+                <div class="max-w-2xl">
+                    <h3 class="text-3xl font-bold text-white mb-4">Install via Cargo</h3>
+                    <p class="text-gray-400 mb-6">
+                        Requires Linux (Kernel 4.0+), libpcap, and Rust MSRV 1.75+.
+                    </p>
+                </div>
+
+                <div class="w-full max-w-2xl text-left">
+                    <div class="code-block rounded-lg p-4 font-mono text-sm shadow-xl">
+                        <div class="flex justify-between items-center mb-3 text-gray-500 text-xs border-b border-gray-700 pb-2">
+                            <span>BASH</span>
+                            <button class="hover:text-white transition-colors" onclick="copyCode()">
+                                <i class="far fa-copy"></i>
+                            </button>
+                        </div>
+                        <div class="text-gray-300 space-y-2 overflow-x-auto">
+                            <p class="text-gray-500"># Install dependencies</p>
+                            <p><span class="text-purple-400">sudo</span> apt install libpcap-dev libsqlite3-dev</p>
+                            <br>
+                            <p class="text-gray-500"># Clone & Build</p>
+                            <p><span class="text-purple-400">git</span> clone https://github.com/disc0nct/FlowSentinel.git</p>
+                            <p><span class="text-purple-400">cd</span> FlowSentinel</p>
+                            <p><span class="text-purple-400">cargo</span> build --release</p>
+                            <br>
+                            <p class="text-gray-500"># Run with privileges</p>
+                            <p><span class="text-purple-400">sudo</span> ./target/release/flowsentinel</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex gap-4">
+                     <a href="https://github.com/disc0nct/FlowSentinel" class="px-6 py-3 bg-gray-800 hover:bg-gray-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2">
+                        <i class="fas fa-book"></i> Read Documentation
+                     </a>
+                     <a href="https://github.com/disc0nct/FlowSentinel/releases" class="px-6 py-3 bg-emerald-500/10 border border-emerald-500 text-emerald-400 font-medium rounded-lg hover:bg-emerald-500 hover:text-black transition-colors flex items-center gap-2">
+                        <i class="fas fa-download"></i> Download .deb
+                     </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="border-t border-gray-800 bg-[#050507] pt-16 pb-8">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">
+                <div class="col-span-1 md:col-span-2">
+                    <div class="flex items-center gap-2 mb-4">
+                        <i class="fas fa-shield-alt text-emerald-500 text-xl"></i>
+                        <span class="font-bold text-xl text-white">FlowSentinel</span>
+                    </div>
+                    <p class="text-gray-500 text-sm leading-relaxed max-w-sm">
+                        An open-source, process-centric network monitor built with Rust. Designed for systems administrators and security researchers.
+                    </p>
+                </div>
+                <div>
+                    <h4 class="text-white font-semibold mb-4">Project</h4>
+                    <ul class="space-y-2 text-sm text-gray-500">
+                        <li><a href="https://github.com/disc0nct/FlowSentinel" class="hover:text-emerald-400 transition-colors">Documentation</a></li>
+                        <li><a href="https://github.com/disc0nct/FlowSentinel/issues" class="hover:text-emerald-400 transition-colors">Report Issues</a></li>
+                        <li><a href="https://github.com/disc0nct/FlowSentinel/pulls" class="hover:text-emerald-400 transition-colors">Contribute</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="text-white font-semibold mb-4">Connect</h4>
+                    <div class="flex space-x-4">
+                        <a href="https://github.com/disc0nct" class="text-gray-500 hover:text-white transition-colors text-xl">
+                            <i class="fab fa-github"></i>
+                        </a>
+                        <a href="#" class="text-gray-500 hover:text-white transition-colors text-xl">
+                            <i class="fab fa-twitter"></i>
+                        </a>
+                        <a href="#" class="text-gray-500 hover:text-white transition-colors text-xl">
+                            <i class="fab fa-discord"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <div class="border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center">
+                <p class="text-gray-600 text-sm">© 2025 FlowSentinel. MIT License.</p>
+                <p class="text-gray-600 text-sm mt-2 md:mt-0">Designed for <a href="https://github.com/disc0nct" class="text-emerald-500 hover:underline">disc0nct</a></p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script>
+        // Copy functionality
+        function copyCode() {
+            const code = "sudo apt install libpcap-dev libsqlite3-dev\ngit clone https://github.com/disc0nct/FlowSentinel.git\ncd FlowSentinel\ncargo build --release\nsudo ./target/release/flowsentinel";
+            navigator.clipboard.writeText(code);
+            const btn = document.querySelector('.fa-copy');
+            btn.classList.remove('fa-copy');
+            btn.classList.add('fa-check', 'text-emerald-400');
+            setTimeout(() => {
+                btn.classList.add('fa-copy');
+                btn.classList.remove('fa-check', 'text-emerald-400');
+            }, 2000);
+        }
+
+        // Navbar Scroll Effect
+        window.addEventListener('scroll', () => {
+            const nav = document.getElementById('navbar');
+            if (window.scrollY > 50) {
+                nav.classList.add('bg-gray-900/90', 'backdrop-blur-md', 'shadow-lg');
+            } else {
+                nav.classList.remove('bg-gray-900/90', 'backdrop-blur-md', 'shadow-lg');
+            }
+        });
+
+        // Mobile Menu Toggle
+        const btn = document.getElementById('mobile-menu-btn');
+        const menu = document.getElementById('mobile-menu');
+        btn.addEventListener('click', () => {
+            menu.classList.toggle('hidden');
+        });
+
+        // Scroll Reveal Animation using IntersectionObserver
+        const revealElements = document.querySelectorAll('.reveal');
+        
+        const revealObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('active');
+                }
+            });
+        }, { threshold: 0.1 });
+
+        revealElements.forEach(el => revealObserver.observe(el));
+
+        // Network Particle Canvas Animation
+        const canvas = document.getElementById('network-canvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+        let particles = [];
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+
+        class Particle {
+            constructor() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * height;
+                this.vx = (Math.random() - 0.5) * 0.5;
+                this.vy = (Math.random() - 0.5) * 0.5;
+                this.size = Math.random() * 2 + 1;
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+
+                if (this.x < 0 || this.x > width) this.vx *= -1;
+                if (this.y < 0 || this.y > height) this.vy *= -1;
+            }
+
+            draw() {
+                ctx.fillStyle = 'rgba(0, 255, 157, 0.3)';
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function initParticles() {
+            particles = [];
+            for (let i = 0; i < 60; i++) { // Adjusted for performance
+                particles.push(new Particle());
+            }
+        }
+
+        // Mouse interaction
+        let mouse = { x: null, y: null };
+        window.addEventListener('mousemove', (e) => {
+            mouse.x = e.x;
+            mouse.y = e.y;
+        });
+
+        function animate() {
+            ctx.clearRect(0, 0, width, height);
+            
+            for (let i = 0; i < particles.length; i++) {
+                particles[i].update();
+                particles[i].draw();
+
+                // Connect particles
+                for (let j = i; j < particles.length; j++) {
+                    const dx = particles[i].x - particles[j].x;
+                    const dy = particles[i].y - particles[j].y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < 150) {
+                        ctx.beginPath();
+                        ctx.strokeStyle = `rgba(0, 255, 157, ${0.1 - distance/1500})`;
+                        ctx.lineWidth = 1;
+                        ctx.moveTo(particles[i].x, particles[i].y);
+                        ctx.lineTo(particles[j].x, particles[j].y);
+                        ctx.stroke();
+                    }
+                }
+
+                // Connect to mouse
+                if (mouse.x != null) {
+                    const dx = particles[i].x - mouse.x;
+                    const dy = particles[i].y - mouse.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance < 200) {
+                        ctx.beginPath();
+                        ctx.strokeStyle = `rgba(0, 255, 157, ${0.2 - distance/1000})`;
+                        ctx.lineWidth = 1;
+                        ctx.moveTo(particles[i].x, particles[i].y);
+                        ctx.lineTo(mouse.x, mouse.y);
+                        ctx.stroke();
+                    }
+                }
+            }
+            requestAnimationFrame(animate);
+        }
+
+        window.addEventListener('resize', () => {
+            resize();
+            initParticles();
+        });
+
+        resize();
+        initParticles();
+        animate();
+
+    </script>
+</body>
+</html>
