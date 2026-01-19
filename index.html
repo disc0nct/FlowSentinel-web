@@ -44,11 +44,6 @@
         }
 
         /* Animations */
-        @keyframes pulse-glow {
-            0%, 100% { box-shadow: 0 0 15px var(--primary-dim); }
-            50% { box-shadow: 0 0 25px var(--primary-dim); }
-        }
-
         @keyframes float {
             0% { transform: translateY(0px); }
             50% { transform: translateY(-10px); }
@@ -107,12 +102,12 @@
     <!-- Navigation -->
     <nav class="fixed w-full z-50 top-0 transition-all duration-300" id="navbar">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex items-center justify-between h-20">
-                <div class="flex items-center gap-3">
-                    <div class="w-6 h-6 rounded bg-emerald-500 flex items-center justify-center text-black font-bold text-sm">
+            <div class="flex items-center justify-between h-16 md:h-20">
+                <div class="flex items-center gap-2">
+                    <div class="w-5 h-5 rounded-sm bg-emerald-500 flex items-center justify-center text-black font-bold text-[10px]">
                         <i class="fas fa-shield-alt"></i>
                     </div>
-                    <span class="font-bold text-lg tracking-tight text-white">Flow<span class="text-emerald-400">Sentinel</span></span>
+                    <span class="font-bold text-base tracking-tight text-white">Flow<span class="text-emerald-400">Sentinel</span></span>
                 </div>
                 <div class="hidden md:block">
                     <div class="ml-10 flex items-baseline space-x-8">
@@ -129,7 +124,7 @@
                 <!-- Mobile menu button -->
                 <div class="md:hidden">
                     <button id="mobile-menu-btn" class="text-gray-300 hover:text-white focus:outline-none">
-                        <i class="fas fa-bars text-2xl"></i>
+                        <i class="fas fa-bars text-xl"></i>
                     </button>
                 </div>
             </div>
@@ -175,17 +170,14 @@
             <!-- TUI Screenshot Container -->
             <div class="mt-20 mx-auto max-w-5xl reveal delay-500 animate-float">
                 <div class="glass-panel rounded-xl overflow-hidden shadow-2xl border border-gray-700 relative group">
-                    <!-- Window Controls -->
                     <div class="bg-[#1e1e24] px-4 py-3 border-b border-gray-700 flex items-center gap-2">
                         <div class="w-3 h-3 rounded-full bg-red-500"></div>
                         <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
                         <div class="w-3 h-3 rounded-full bg-green-500"></div>
                         <div class="ml-4 text-xs text-gray-500 font-mono">root@flowsentinel:~</div>
                     </div>
-                    <!-- Image -->
                     <div class="relative bg-[#0f0f12]">
                          <img src="https://github.com/user-attachments/assets/77826975-19db-4256-9dc5-9fb6cfc64b0d" alt="FlowSentinel TUI Interface" class="w-full h-auto opacity-90 hover:opacity-100 transition-opacity duration-300">
-                         <!-- Overlay Gradient -->
                          <div class="absolute bottom-0 left-0 w-full h-24 bg-gradient-to-t from-black/50 to-transparent pointer-events-none"></div>
                     </div>
                 </div>
@@ -379,8 +371,8 @@
             <div class="grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">
                 <div class="col-span-1 md:col-span-2">
                     <div class="flex items-center gap-2 mb-4">
-                        <i class="fas fa-shield-alt text-emerald-500 text-xl"></i>
-                        <span class="font-bold text-xl text-white">FlowSentinel</span>
+                        <i class="fas fa-shield-alt text-emerald-500 text-base"></i>
+                        <span class="font-bold text-lg text-white">FlowSentinel</span>
                     </div>
                     <p class="text-gray-500 text-sm leading-relaxed max-w-sm">
                         An open-source, process-centric network monitor built with Rust. Designed for systems administrators and security researchers.
@@ -419,7 +411,6 @@
     <script>
         function copyCode() {
             const code = "sudo apt install libpcap-dev libsqlite3-dev\ngit clone https://cuty.io/GithubLink\ncd FlowSentinel\ncargo build --release\nsudo ./target/release/flowsentinel";
-            
             const textArea = document.createElement("textarea");
             textArea.value = code;
             document.body.appendChild(textArea);
